@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explaining LIME</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h2 {
+            color: #0056b3;
+        }
+        ol {
+            padding-left: 20px;
+        }
+        pre {
+            background-color: #eee;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: "Courier New", Courier, monospace;
+            color: #d6336c;
+        }
+        a {
+            color: #0056b3;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h2>What is LIME?</h2>
+    <p>LIME (Local Interpretable Model-Agnostic Explanations) is a technique for explaining the predictions of any machine learning classifier. LIME works by perturbing the input and observing the changes in the model's output, in order to determine which input features are most influential for a given prediction.</p>
+
+    <h2>How LIME Works</h2>
+    <ol>
+        <li><strong>Sampling around the input</strong>: LIME generates a number of perturbed versions of the input by randomly masking out or changing different features.</li>
+        <li><strong>Obtaining model outputs</strong>: LIME then runs these perturbed inputs through the target machine learning model and records the outputs.</li>
+        <li><strong>Fitting an interpretable model</strong>: LIME uses the perturbed inputs and corresponding model outputs to fit a simple, interpretable model (such as a linear regression model) that approximates the behavior of the original model around the input of interest.</li>
+        <li><strong>Extracting feature importance</strong>: The coefficients of the interpretable model provide an estimate of the relative importance of each input feature in driving the original model's prediction.</li>
+    </ol>
+    <h2>Everyday analogy</h2>
+
+    <div class="section">
+        <h3>Imagine this scenario:</h3>
+        <p>
+            You have a mysterious box (a machine learning model) that can tell whether a fruit is an apple or an orange.
+            However, it doesn’t explain why it made its decision. You’re curious to find out what the box considers 
+            important when making its predictions.
+        </p>
+    </div>
+
+    <div class="section">
+        <h3>How LIME works:</h3>
+        <ol>
+            <li><strong>Pick an example to explain:</strong> Suppose you show the box a red apple, and it confidently says, 
+            “This is an apple.”</li>
+            <li><strong>Make small changes (add ‘noise’):</strong> LIME tweaks the example slightly. For instance, it might:
+                <ul>
+                    <li>Reduce the redness of the apple,</li>
+                    <li>Add orange spots to its surface, or</li>
+                    <li>Change its shape virtually.</li>
+                </ul>
+            </li>
+            <li><strong>Observe the model’s reaction:</strong> Each modified example is fed back into the box, and you see 
+            how its prediction changes. For example:
+                <ul>
+                    <li>With less red, the box still says, “This is an apple.”</li>
+                    <li>With added orange spots, the box hesitates and says, “Maybe this is an orange.”</li>
+                    <li>With a shape change, the box confidently declares, “This is an orange.”</li>
+                </ul>
+            </li>
+            <li><strong>Summarize the findings:</strong> LIME analyzes these reactions to figure out what features are 
+            most important for the box’s decision. For instance:
+                <ul>
+                    <li>Red color is crucial for identifying apples.</li>
+                    <li>Round shape is key to identifying oranges.</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+    <h2>Example Codes, using LIME to explain a transformer model</h2>
+    <pre><code>
+        from transformers import GPT2LMHeadModel, GPT2Tokenizer
+        from lime.lime_text import LimeTextExplainer
+        from scipy.special import softmax
+        import torch
+        import shap
+        import numpy as np
+        import matplotlib.pyplot as plt
+        
+        
+        model_name = "gpt2"
+        model = GPT2LMHeadModel.from_pretrained(model_name)
+        tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+        model.eval()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Set pad_token_id to eos_token_id to avoid the warning
+        tokenizer.pad_token = tokenizer.eos_token
+        
+        # Function to generate text with attention mask
+        def generate_text(prompt, max_length=100, temperature=0.7):
+            # Encode the input prompt and set the attention mask
+            input_ids = tokenizer.encode(prompt, return_tensors="pt")
+            # Generate text
+            output = model.generate(
+                input_ids,
+                max_length=max_length,
+                temperature=temperature,
+                num_return_sequences=1,
+                no_repeat_ngram_size=2,
+                do_sample=True,
+                top_p=0.1, #set relatively low top-p
+                pad_token_id=tokenizer.pad_token_id  # Set pad token ID to avoid warnings
+            )
+        
+            # Decode the generated text and return it
+            generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+            return generated_text
+        
+        # Generate Prompt
+        prompt = "I was late for work this morning because my alarm didn't go off. When I finally got out of bed, I realized I had also forgotten to"
+        generated_text = generate_text(prompt, max_length=50, temperature=0.1) # low temperature
+        print(generated_text)
+        
+        LIME
+        
+        def LIME_gpt2_content(texts):
+            # tokenize
+            inputs = tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
+        
+            # get model's output
+            outputs = model(**inputs)
+        
+            # choose logits
+            logits = outputs.logits[:, -1, :]  # Only consider the last token's output
+        
+            # softmax to make it probability
+            probabilities = torch.softmax(logits, dim=-1).detach().numpy()
+        
+            return probabilities
+        
+        # LIME Text Explainer
+        explainer = LimeTextExplainer()
+        
+        # Example prompt for testing
+        prompt = "I was late for work this morning because my alarm didn't go off. When I finally got out of bed, I realized I had also forgotten to"
+        
+        tokenized_input = tokenizer.tokenize(prompt)
+        num_tokens = len(tokenized_input)
+        print(num_tokens)
+        # Explain GPT-2 prediction with LIME
+        exp = explainer.explain_instance(prompt, LIME_gpt2_content, num_features=num_tokens, num_samples=250) #higher num_samples may crash
+        
+        # Extract the words (tokens) and their corresponding importance from the LIME explanation
+        lime_tokens = [word for word, weight in exp.as_list()]
+        lime_values = [weight for word, weight in exp.as_list()]
+        
+        # Create a horizontal bar chart to display the importance of each token
+        plt.figure(figsize=(10, 6))
+        plt.barh(lime_tokens, lime_values)
+        plt.xlabel('LIME Importance Value')
+        plt.ylabel('Tokens')
+        plt.title('Token Importance Based on LIME Explanation')
+        plt.tight_layout()
+        plt.show()
+        
+        token_ids = [1210, 1234, 2222, 1011]
+        
+        # Decode the token IDs into tokens
+        tokens = tokenizer.decode(token_ids)
+        
+        # Print the corresponding tokens
+        print(tokens)
+        </code></pre>
+        
+        <h3>Conclusion in this example</h3>
+        <div class="conclusion">
+            <h3>Strengths</h3>
+            <ul>
+                <li>LIME is flexible and can be applied to various data types, including tabular data, text, and images, making it a versatile tool for different domains.</li>
+                <li>It approximates complex models locally with simpler interpretable models, often using linear models for local approximations.</li>
+                <li>The process is intuitive: LIME perturbs the input and observes its effect on the model's output, making it accessible to users with limited machine learning knowledge.</li>
+            </ul>
+            
+            <h3>Limitations</h3>
+            <ul>
+                <li>LIME can be computationally expensive and slow for complex models since it requires querying the model multiple times.</li>
+                <li>The quality of explanations depends on how input data is perturbed and the local neighborhood defined, with no clear guidelines on best practices.</li>
+                <li>For text or images, performance can be sensitive to input representation, such as tokenization in NLP tasks.</li>
+            </ul>
+            
+            <h3>Potential Improvements</h3>
+            <ul>
+                <li>Aggregating explanations across multiple generated outputs for models like GPT-2 could provide more comprehensive insights.</li>
+                <li>Increasing the number of samples (if computational resources allow) can improve the accuracy of explanations.</li>
+            </ul>
+        </div>
+    <footer>
+        <p><i>This website is generated based on the content of my Assignment 5, with the help of ChatGPT</i></p>
+    </footer>
+</body>
+</html>
+
